@@ -1,0 +1,68 @@
+version: '3'
+
+services:
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: verceldb
+      POSTGRES_USER: default
+      POSTGRES_PASSWORD: lMND5Yyec3JT
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    environment:
+      RABBITMQ_DEFAULT_USER: user
+      RABBITMQ_DEFAULT_PASS: password
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+
+  elasticsearch:
+    image: elasticsearch:7.10.1
+    environment:
+      discovery.type: single-node
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+
+  web:
+    build: .
+    command: gunicorn task_manager.wsgi:application --bind 0.0.0.0:8000
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - rabbitmq
+      - elasticsearch
+    environment:
+      - DATABASE_URL=postgres://default:lMND5Yyec3JT@ep-rough-frog-a4k1b6r2-pooler.us-east-1.aws.neon.tech:5432/verceldb?sslmode=require
+
+  celery:
+    build: .
+    command: celery -A task_manager worker --loglevel=info
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+      - rabbitmq
+      - elasticsearch
+
+  flower:
+    build: .
+    command: celery -A task_manager flower --port=5555 --basic_auth=user:password
+    ports:
+      - "5555:5555"
+    depends_on:
+      - db
+      - rabbitmq
+      - elasticsearch
+
+volumes:
+  postgres_data:
+  es_data:
